@@ -8,20 +8,17 @@ require('dotenv').config();
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.static(path.join(__dirname, '..')));
 
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret_change_me';
 const JWT_EXPIRES = process.env.JWT_EXPIRES || '7d';
 
 // ==========================================
-// 🧠 DEMO USERS (baad me DB se replace karo)
+// 🧠 USERS (sirf uid aur password)
 // ==========================================
-// password hash = bcrypt.hashSync('mypassword123', 10)
 const USERS = {
   '4372714908': {
     uid: '4372714908',
-    name: 'Kundan',
-    // Hash of: 08CF817C0BCEBB3B4D168E06D5CD4F63B9844DA8E807FC5CEB945BAF2E36AED9
     passwordHash: bcrypt.hashSync(
       '08CF817C0BCEBB3B4D168E06D5CD4F63B9844DA8E807FC5CEB945BAF2E36AED9',
       10
@@ -30,7 +27,7 @@ const USERS = {
 };
 
 // ==========================================
-// 🏠 ROOT — API Info
+// 🏠 API Info
 // ==========================================
 app.get('/api', (req, res) => {
   res.json({
@@ -76,8 +73,9 @@ app.post('/token', async (req, res) => {
       });
     }
 
+    // ✅ Sirf uid token me jaayega, koi naam nahi
     const token = jwt.sign(
-      { uid: user.uid, name: user.name },
+      { uid: user.uid },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES }
     );
