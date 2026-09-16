@@ -1,86 +1,107 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '../public')));
 
-const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'default_secret_change_me';
 const JWT_EXPIRES = process.env.JWT_EXPIRES || '7d';
 
-// 🧠 Demo users (baad me database se replace karna)
+// ==========================================
+// 🧠 DEMO USERS (baad me DB se replace karo)
+// ==========================================
+// password hash = bcrypt.hashSync('mypassword123', 10)
 const USERS = {
   '4372714908': {
     uid: '4372714908',
-    password: '08CF817C0BCEBB3B4D168E06D5CD4F63B9844DA8E807FC5CEB945BAF2E36AED9',
-    name: 'priya1234'
+    name: 'Kundan',
+    // Hash of: 08CF817C0BCEBB3B4D168E06D5CD4F63B9844DA8E807FC5CEB945BAF2E36AED9
+    passwordHash: bcrypt.hashSync(
+      '08CF817C0BCEBB3B4D168E06D5CD4F63B9844DA8E807FC5CEB945BAF2E36AED9',
+      10
+    )
   }
 };
 
-// ✅ Root route
-app.get('/', (req, res) => {
+// ==========================================
+// 🏠 ROOT — API Info
+// ==========================================
+app.get('/api', (req, res) => {
   res.json({
     status: true,
-    message: 'JWT API is running 🚀',
+    message: '🚀 JWT API is running',
+    version: '1.0.0',
     endpoints: {
-      token: 'POST /token  { uid, password }',
-      verify: 'POST /verify { token }',
-      profile: 'GET  /profile (Bearer token)'
+      token: 'POST /token   body: { uid, password }',
+      verify: 'POST /verify  body: { token }',
+      profile: 'GET  /profile header: Authorization: Bearer <token>'
     }
   });
 });
 
+// ==========================================
 // 🔐 TOKEN GENERATE
-app.post('/token', (req, res) => {
-  const { uid, password } = req.body || {};
+// ==========================================
+app.post('/token', async (req, res) => {
+  try {
+    const uid = req.body?.uid || req.query?.uid;
+    const password = req.body?.password || req.query?.password;
 
-  // Query se bhi support (GET ke liye)
-  const finalUid = uid || req.query.uid;
-  const finalPassword = password || req.query.password;
+    if (!uid || !password) {
+      return res.status(400).json({
+        status: false,
+        message: 'Missing uid or password'
+      });
+    }
 
-  if (!finalUid || !finalPassword) {
-    return res.status(400).json({
+    const user = USERS[uid];
+    if (!user) {
+      return res.status(404).json({
+        status: false,
+        message: 'User not found'
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) {
+      return res.status(401).json({
+        status: false,
+        message: 'Invalid password'
+      });
+    }
+
+    const token = jwt.sign(
+      { uid: user.uid, name: user.name },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES }
+    );
+
+    res.json({
+      status: true,
+      message: 'Token generated successfully',
+      token,
+      expiresIn: JWT_EXPIRES
+    });
+  } catch (err) {
+    res.status(500).json({
       status: false,
-      message: 'Missing uid or password'
+      message: 'Server error',
+      error: err.message
     });
   }
-
-  const user = USERS[finalUid];
-
-  if (!user) {
-    return res.status(404).json({
-      status: false,
-      message: 'User not found'
-    });
-  }
-
-  if (user.password !== finalPassword) {
-    return res.status(401).json({
-      status: false,
-      message: 'Invalid password'
-    });
-  }
-
-  const token = jwt.sign(
-    { uid: user.uid, name: user.name },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES }
-  );
-
-  res.json({
-    status: true,
-    message: 'Token generated successfully',
-    token,
-    expiresIn: JWT_EXPIRES
-  });
 });
 
+// ==========================================
 // 🔎 VERIFY TOKEN
+// ==========================================
 app.post('/verify', (req, res) => {
   const { token } = req.body || {};
-
   if (!token) {
     return res.status(400).json({
       status: false,
@@ -104,10 +125,11 @@ app.post('/verify', (req, res) => {
   }
 });
 
-// 🛡️ Middleware
+// ==========================================
+// 🛡️ AUTH MIDDLEWARE
+// ==========================================
 function authMiddleware(req, res, next) {
   const auth = req.headers.authorization;
-
   if (!auth || !auth.startsWith('Bearer ')) {
     return res.status(401).json({
       status: false,
@@ -116,10 +138,8 @@ function authMiddleware(req, res, next) {
   }
 
   const token = auth.split(' ')[1];
-
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
+    req.user = jwt.verify(token, JWT_SECRET);
     next();
   } catch (err) {
     return res.status(401).json({
@@ -130,7 +150,9 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// ==========================================
 // 👤 PROTECTED ROUTE
+// ==========================================
 app.get('/profile', authMiddleware, (req, res) => {
   res.json({
     status: true,
@@ -139,11 +161,13 @@ app.get('/profile', authMiddleware, (req, res) => {
   });
 });
 
-// 🚀 Local run
+// ==========================================
+// 🚀 LOCAL SERVER
+// ==========================================
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`✅ Server running on http://localhost:${PORT}`);
+    console.log(`✅ Server: http://localhost:${PORT}`);
   });
 }
 
